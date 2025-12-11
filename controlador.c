@@ -21,7 +21,7 @@ void handler_sigalrm(int s, siginfo_t *i, void *v)
     Tipo tipo;
 
     memset(&controlador, 0, sizeof(dadosControlador));
-    strcpy(controlador.msg, "[AVISO] O Servidor foi encerrado pelo Administrador.");
+    strcpy(controlador.msg, "[SHUTDOWN] O Servidor foi encerrado pelo Administrador.");
 
     tipo.tipo = 4;  //TERMINAR
 
@@ -338,11 +338,11 @@ void *AtendeControlador(void *tha)
                         // Escreve os dados no FIFO
                         if (write(fd_controlador, &tipo, sizeof(Tipo)) == -1)
                         {
-                            perror("Erro ao escrever tipo no FIFO.");
+                            perror("[ERRO] Erro ao escrever tipo no FIFO.");
                         }
                         if (write(fd_controlador, &controlador, sizeof(dadosControlador)) == -1)
                         {
-                            perror("Erro ao escrever controlador no FIFO.");
+                            perror("[ERRO] Erro ao escrever controlador no FIFO.");
                         }
                         close(fd_controlador);
                     }
@@ -368,19 +368,18 @@ void *AtendeCliente(void *tha)
     int fd_cliente, fd_controlador;
 
     if (mkfifo(ptd->fifo, 0600) == -1 && errno != EEXIST) {
-        perror("[ERRO]: Erro ao criar fifo servidor.");
+        perror("[ERRO] Erro ao criar fifo servidor.");
     }
     
     fd_cliente = open(ptd->fifo, O_RDWR);
     if (fd_cliente == -1) {
-        perror("Erro fatal ao abrir pipe publico");
+        perror("[ERRO] Erro fatal ao abrir pipe publico");
         ptd->continuar = 0;
         pthread_exit(NULL);
     }
 
     while (ptd->continuar)
     {
-        printf("\n[DEBUG] Servidor à espera de dados no pipe...\n\n");
         size = read(fd_cliente, &cliente, sizeof(dadosCliente));
 
         if (size == -1) {
@@ -406,6 +405,8 @@ void *AtendeCliente(void *tha)
             if (strcmp(op.opcao1, "login") == 0)
             {
                 int verifica = VerificaCliente(cliente);
+                char msgInicial[2048]; // Buffer grande para caber o menu todo
+                int pos = 0;
 
                 memset(&controlador, 0, sizeof(dadosControlador));
 
@@ -416,29 +417,36 @@ void *AtendeCliente(void *tha)
 
                     controlador.entrar = 1;
                     tipo.tipo = 5;
+                    pos += sprintf(msgInicial + pos, "-Bem-vindo(a), %s!\n", cliente.utilizador.nome);
+                    pos += sprintf(msgInicial + pos, "---//---//---//---//- Bem vindo(a) ao Servidor! -//---//---//---//--- \n");
+                    pos += sprintf(msgInicial + pos, "- Insira 'agendar <hora> <local> <distancia> para agendar uma viagem.\n");
+                    pos += sprintf(msgInicial + pos, "- Insira 'cancelar <id>' para cancelar uma viagem agendada.\n");
+                    pos += sprintf(msgInicial + pos, "- Insira 'consultar' para consultar todos os serviços agendados.\n");
+                    pos += sprintf(msgInicial + pos, "- Insira 'terminar' para terminar o programa.\n\n");
                 }
                 else if (verifica == 0)
                 {
-                    printf("\n- Um novo user com o nome [%s] não entrou pois já existe um user com o mesmo nome.\n", cliente.utilizador.nome);
                     controlador.entrar = 0;
                     tipo.tipo = 0;
+                    pos += sprintf(msgInicial + pos, "[ERRO] Este utilizador já existe ou está online.\n");
                 }
                 else if (verifica == -1)
                 {
-                    printf("Capacidade máxima de users atingida (atual %d). Não é possível adicionar [%s].\n", listaUtilizadores->nr_users, cliente.utilizador.nome);
                     controlador.entrar = 0;
                     tipo.tipo = 0;
+                    pos += sprintf(msgInicial + pos, "[ERRO] Servidor cheio ou erro interno.\n");
                 }
                 else
                 {
-                    printf("Erro no login.");
                     controlador.entrar = 0;
                     tipo.tipo = 0;
+                    pos += sprintf(msgInicial + pos, "[ERRO] Erro ao entrar no servidor.\n");
                 }
-
+                strcpy(controlador.msg, msgInicial);
                 fd_controlador = open(cliente.fifo, O_WRONLY);
                 if (fd_controlador != -1)
                 {
+                    tipo.tipo = 5;
                     write(fd_controlador, &tipo, sizeof(Tipo));
                     write(fd_controlador, &controlador, sizeof(dadosControlador));
                     close(fd_controlador);
@@ -456,15 +464,17 @@ void *AtendeCliente(void *tha)
                 if (hora < 0 || origem[0] == '\0' || distancia <= 0 || listaViagens.num_viagens >= NVIAGENS) {
                     tipo.tipo = 0;
                     if (listaViagens.num_viagens >= NVIAGENS) 
-                        strcpy(cliente.aviso, "ERRO: Parametros invalidos para agendar uma viagem.");
-                    else 
-                        strcpy(cliente.aviso, "ERRO: Limite de viagens atingido.");
+                        strcpy(cliente.aviso, "[AVISO] Limite de viagens atingido.");
 
                     fd_controlador = open(cliente.fifo, O_WRONLY);
                     write(fd_controlador, &tipo, sizeof(Tipo));
                     write(fd_controlador, &cliente, sizeof(dadosCliente));
                     close(fd_controlador);
                     continue;
+                }
+                else
+                {
+                    strcpy(cliente.aviso, "[AVISO] Parametros invalidos para agendar uma viagem.");
                 }
 
                 pthread_mutex_lock(&listaViagens_mutex);
@@ -531,8 +541,16 @@ void *AtendeCliente(void *tha)
                     int h = hora / 3600;
                     int m = (hora % 3600) / 60;
                     int s = hora % 60;
+
                     printf("User [%s] agendou viagem às %02dh:%02dm:%02ds, origem [%s], %d km\n",
                         cliente.utilizador.nome, h, m, s, origem, distancia);
+                    snprintf(controlador.msg, sizeof(controlador.msg), "[AVISO] Viagem agendada com sucesso.\nNome: %s | ID %d | Hora: %02dh:%02dm:%02ds | Origem: %s | Distancia: %d km \n",
+                        listaViagens.viagem[slot].utilizador.nome,
+                        listaViagens.viagem[slot].id,
+                        h, m, s,
+                        listaViagens.viagem[slot].origem,
+                        listaViagens.viagem[slot].distancia
+                    );
 
                     fd_controlador = open(cliente.fifo, O_WRONLY);
                     if (fd_controlador != -1) {
@@ -551,14 +569,14 @@ void *AtendeCliente(void *tha)
             // INSERIU SUBSCRIBE
             else if (strcmp(op.opcao1, "cancelar") == 0)
             {
-                int id = atoi(op.opcao2) ;
+                int id = atoi(op.opcao2);
 
                 printf("cliente [%d] acedeu a [%s] com id [%d]\n", cliente.utilizador.user_pid, op.opcao1, id);
 
                 // validar id
                 if (id < 0 || id >= NVIAGENS) {
                     tipo.tipo = 0;
-                    strcpy(cliente.aviso, "ERRO: ID de viagem inválido.");
+                    strcpy(cliente.aviso, "[AVISO] ID de viagem inválido.");
 
                     fd_controlador = open(cliente.fifo, O_WRONLY);
                     write(fd_controlador, &tipo, sizeof(Tipo));
@@ -582,7 +600,7 @@ void *AtendeCliente(void *tha)
                 if (listaViagens.viagem[id - 1].origem[0] == '\0') {
                     pthread_mutex_unlock(&listaViagens_mutex);
                     tipo.tipo = 0;
-                    strcpy(cliente.aviso, "ERRO: Viagem não existe.");
+                    strcpy(cliente.aviso, "[AVISO] Viagem não existe.");
 
                     fd_controlador = open(cliente.fifo, O_WRONLY);
                     write(fd_controlador, &tipo, sizeof(Tipo));
@@ -596,7 +614,7 @@ void *AtendeCliente(void *tha)
                 if (strcmp(listaViagens.viagem[id - 1].utilizador.nome, cliente.utilizador.nome) != 0) {
                     pthread_mutex_unlock(&listaViagens_mutex);
                     tipo.tipo = 0;
-                    strcpy(cliente.aviso, "ERRO: Só pode cancelar viagens que agendou.");
+                    strcpy(cliente.aviso, "[AVISO] So pode cancelar viagens que agendou.");
 
                     fd_controlador = open(cliente.fifo, O_WRONLY);
                     write(fd_controlador, &tipo, sizeof(Tipo));
@@ -635,20 +653,52 @@ void *AtendeCliente(void *tha)
             {
                 printf("cliente [%d] acedeu a consultar viagens\n", cliente.utilizador.user_pid);
 
+                memset(&controlador, 0, sizeof(dadosControlador));
                 pthread_mutex_lock(&listaViagens_mutex);
 
-                // preparar resposta
-                tipo.tipo = 3;
+                char listaViagensCliente[4096];
+                int pos = 0;
 
+                pos += sprintf(listaViagensCliente + pos, "\n------ VIAGENS AGENDADAS ------\n");
+
+                int found = 0;
+                for (int i = 0; i < listaViagens.num_viagens; i++)
+                {
+                    if (listaViagens.viagem[i].origem[0] != '\0')
+                    {
+                        int h = listaViagens.viagem[i].hora / 3600;
+                        int m = (listaViagens.viagem[i].hora % 3600) / 60;
+                        int s = listaViagens.viagem[i].hora % 60;
+
+                        pos += snprintf(listaViagensCliente + pos, sizeof(listaViagensCliente),
+                            "Nome: %s | ID %d | Hora: %02dh:%02dm:%02ds | Origem: %s | Distancia: %d km \n",
+                            listaViagens.viagem[i].utilizador.nome,
+                            listaViagens.viagem[i].id,
+                            h, m, s,
+                            listaViagens.viagem[i].origem,
+                            listaViagens.viagem[i].distancia
+                        );
+
+                        found = 1;
+                    }
+                }
+
+                if (!found) pos += sprintf(listaViagensCliente + pos, "Não existem viagens agendadas.\n");
+
+                pos += sprintf(listaViagensCliente + pos, "--------------------------------\n");
+
+                strcpy(controlador.msg, listaViagensCliente);
+
+                pthread_mutex_unlock(&listaViagens_mutex);
+                
                 // enviar toda a lista de viagens ao cliente
                 fd_controlador = open(cliente.fifo, O_WRONLY);
                 if (fd_controlador != -1) {
+                    tipo.tipo = 3;
                     write(fd_controlador, &tipo, sizeof(Tipo));
-                    write(fd_controlador, &listaViagens, sizeof(ListaViagens));
+                    write(fd_controlador, &controlador, sizeof(dadosControlador));
                     close(fd_controlador);
                 }
-
-                pthread_mutex_unlock(&listaViagens_mutex);
 
                 printf("Lista de viagens enviada ao cliente [%s]\n", cliente.utilizador.nome);
             }

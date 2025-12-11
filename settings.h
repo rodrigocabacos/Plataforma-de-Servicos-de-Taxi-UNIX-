@@ -71,7 +71,7 @@ typedef struct{
 typedef struct
 {   
     Utilizador utilizador;
-    char msg[300];
+    char msg[4096];
     int entrar;
     char aviso[100];
     char fifo[20];
@@ -83,7 +83,7 @@ typedef struct
 typedef struct
 {
     dadosCliente cliente;
-    char msg[300];                    
+    char msg[4096];                    
     int expulso;
     int entrar;
     int distanciaTotal;

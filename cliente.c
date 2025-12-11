@@ -45,7 +45,6 @@ void *AtendeControlador(void *tha) {
 
     dadosCliente clienteAtual;
     dadosControlador controlador;
-    ListaViagens listaViagens;
 
     mkfifo(ptd->fifo, 0600);
     fd_controlador = open(ptd->fifo, O_RDWR );
@@ -69,7 +68,7 @@ void *AtendeControlador(void *tha) {
             // Tipo Aviso
             if (tipo.tipo == 0) {
                 if (read(fd_controlador, &clienteAtual, sizeof(dadosCliente)) > 0)
-                    printf("[AVISO] %s\n", clienteAtual.aviso);
+                    printf("%s\n", clienteAtual.aviso);
             }
             // Tipo Agendar
             else if (tipo.tipo == 1) {
@@ -77,57 +76,20 @@ void *AtendeControlador(void *tha) {
                     Viagem *v = &controlador.cliente.viagens[0];
 
                     if (v->origem[0] != '\0') {
-                        printf("[AVISO] Viagem [%d] registada --- Cliente: %s | Hora: %02dh:%02dm:%02ds | Origem: %s | Distancia: %dkm \n", 
-                            v->id,
-                            cliente.utilizador.nome,
-                            v->hora / 3600, v->hora % 3600 / 60, v->hora % 60,
-                            v->origem,
-                            v->distancia
-                        );
+                        printf("%s\n", controlador.msg);
                     }
                 }
             }
             // Tipo Cancelar
             else if (tipo.tipo == 2) {
                 if(read(fd_controlador, &controlador, sizeof(dadosControlador)) > 0)
-                {
-                    printf("[AVISO] %s\n", controlador.msg);
-                }
+                    printf("%s\n", controlador.msg);
             }
             // Tipo Consultar
             else if (tipo.tipo == 3) {
-                if (read(fd_controlador, &listaViagens, sizeof(ListaViagens)) > 0)
+                if (read(fd_controlador, &controlador, sizeof(dadosControlador)) > 0)
                 {
-                    printf("\n------ VIAGENS AGENDADAS ------\n");
-
-                    int found = 0;
-                    for (int i = 0; i < listaViagens.num_viagens; i++)
-                    {
-                        if (listaViagens.viagem[i].origem[0] != '\0')
-                        {
-                            int h = listaViagens.viagem[i].hora / 3600;
-                            int m = (listaViagens.viagem[i].hora % 3600) / 60;
-                            int s = listaViagens.viagem[i].hora % 60;
-
-                            printf("Nome: %s | ID %d | Hora: %02dh:%02dm:%02ds | Origem: %s | Distancia: %d km \n",
-                                listaViagens.viagem[i].utilizador.nome,
-                                listaViagens.viagem[i].id,
-                                h, m, s,
-                                listaViagens.viagem[i].origem,
-                                listaViagens.viagem[i].distancia
-                            );
-
-                            found = 1;
-                        }
-                    }
-
-                    if (!found) printf("Não existem viagens agendadas.\n");
-                    
-                printf("--------------------------------\n\n");
-                }
-                else
-                {
-                    printf("ERRO: Falha ao ler fd_controlador\n");
+                    printf("%s\n", controlador.msg);
                 }
             }
             // Tipo Sair
@@ -144,19 +106,10 @@ void *AtendeControlador(void *tha) {
             // Tipo Login
             else if (tipo.tipo == 5) {
                 if (read(fd_controlador, &controlador, sizeof(dadosControlador)) > 0) {
-                    if (controlador.entrar) {
+                    if (controlador.entrar) 
+                    {
                         cliente.entrar = 1;
-
-                        printf("-Bem-vindo(a), %s!\n", cliente.utilizador.nome);
-
-                        /*----------------------- TEXTO DE INICIO DE SESSÃO -----------------------*/
-                        printf("---//---//---//---//- Bem vindo(a) ao Servidor! -//---//---//---//--- \n");
-                        printf("- Insira 'agendar <hora> <local> <distancia> para agendar uma viagem.\n");
-                        printf("- Insira 'cancelar' para cancelar uma viagem agendada.\n");
-                        printf("- Insira 'consultar' para consultar todos os serviços agendados.\n");
-                        printf("- Insira 'terminar' para terminar o programa.\n\n");
-
-                        /*-------------------------------------------------------------------------*/
+                        printf("%s\n", controlador.msg);
                     }
                     else {
                         cliente.entrar = 0;
@@ -164,10 +117,8 @@ void *AtendeControlador(void *tha) {
                         running = 0;
                         td[0].continuar = 0;
                         close(fd_controlador);
+                        printf("ERRO A RECEBER LOGIN DO CLIENTE - TENTE OUTRA VEZ");
                     }
-                }
-                else {
-                    printf("ERRO A RECEBER LOGIN DO CLIENTE - TENTE OUTRA VEZ");
                 }
             }
         }
