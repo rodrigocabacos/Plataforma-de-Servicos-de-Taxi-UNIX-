@@ -13,10 +13,28 @@ TH td[1];
 
 // CTRL C
 void handler_sigalrm(int s, siginfo_t *i, void *v) {
-    td[0].continuar = 0;
+    printf("\n[INFO] Recebi CTRL+C. A limpar e sair...\n");
+
+    strcpy(cliente.msg, "terminar");
+
+    int fd_controlador = open(CLIENTE_FIFO, O_WRONLY);
+    
+    if (fd_controlador != -1) {
+        write(fd_controlador, &cliente, sizeof(dadosCliente));
+        close(fd_controlador);
+    }
+
+    if (running) {
+        running = 0;
+        td[0].continuar = 0;
+    }
+    
     unlink(namepipe);
-    printf("\ncliente terminado. Adeus!\n");
-    exit(1);
+    unlink(cliente.fifo);
+
+    printf("\nCliente terminado. Adeus!\n");
+    
+    exit(0);
 }
 
 // RECEBE MENSAGEM DO CONTROLADOR
@@ -115,8 +133,8 @@ void *AtendeControlador(void *tha) {
             // Tipo Sair
             else if (tipo.tipo == 4) {
                 if (read(fd_controlador, &controlador, sizeof(dadosControlador)) > 0) {
+                    printf("[AVISO] %s\n", controlador.msg);
                     running = 0;
-                    printf("%s\n", controlador.msg);
                     td[0].continuar = 0;
                     close(fd_controlador);
                 }

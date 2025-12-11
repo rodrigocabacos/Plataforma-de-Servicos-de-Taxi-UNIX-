@@ -14,15 +14,56 @@ pthread_t tid[3];
 // CRTL C
 void handler_sigalrm(int s, siginfo_t *i, void *v)
 {
-    td[0].continuar = 0;
-    td[1].continuar = 0;
-    td[2].continuar = 0;
+    printf("\n[SHUTDOWN] A iniciar encerramento de emergencia...");
+    printf("\n[SHUTDOWN] A avisar clientes para saírem...\n");
+
+    dadosControlador controlador;
+    Tipo tipo;
+
+    memset(&controlador, 0, sizeof(dadosControlador));
+    strcpy(controlador.msg, "[AVISO] O Servidor foi encerrado pelo Administrador.");
+
+    tipo.tipo = 4;  //TERMINAR
+
+    for (int k = 0; k < NCLIENTES; k++) 
+    {
+        if (listaUtilizadores[k].utilizador.nome[0] != '\0') 
+        {
+            char fifo_destino[64];
+            snprintf(fifo_destino, sizeof(fifo_destino), CONTROL_FIFO, listaUtilizadores[k].utilizador.user_pid);
+            
+            // Usamos O_NONBLOCK para o servidor não bloquear se um cliente já tiver morrido
+            int fd_adeus = open(fifo_destino, O_WRONLY | O_NONBLOCK);
+            
+            if (fd_adeus != -1) {
+                write(fd_adeus, &tipo, sizeof(Tipo));
+                write(fd_adeus, &controlador, sizeof(dadosControlador));
+                close(fd_adeus);
+            }
+        }
+    }
 
     running = 0;
 
+    td[0].continuar = 0;
+    td[1].continuar = 0;
+    td[2].continuar = 0;
+    td[3].continuar = 0;
+
+    // FORÇAR A PARAGEM DO TECLADO
+    pthread_cancel(tid[1]);
+
+    // DESPERTAR AS THREADS
+    int fd_threads = open("CLIENTE_PIPE", O_WRONLY | O_NONBLOCK);
+    if (fd_threads != -1) {
+        dadosCliente dummy;
+        write(fd_threads, &dummy, sizeof(dadosCliente));
+        close(fd_threads);
+    }
+
     unlink(CLIENTE_FIFO);
     printf("\nServidor terminado. Adeus CRTL C!\n");
-    pthread_exit(NULL);
+    exit(0);
 }
 
 int removeUser(char *nomeUser)
@@ -189,7 +230,7 @@ void *AtendeControlador(void *tha)
                 { 
                     printf("Viagem [%d] --- Cliente: %s | Hora: %02dh:%02dm:%02ds | Origem: %s | Destino: %s | Distancia: %d km \n",
                         listaViagens.viagem[i].id,
-                        controlador.cliente.utilizador.nome,
+                        listaViagens.viagem[i].utilizador.nome,
                         listaViagens.viagem[i].hora / 3600, listaViagens.viagem[i].hora % 3600 / 60, listaViagens.viagem[i].hora % 60,
                         listaViagens.viagem[i].origem,
                         listaViagens.viagem[i].destino[0] ? listaViagens.viagem[i].destino : "(indefinido)",
@@ -615,14 +656,41 @@ void *AtendeCliente(void *tha)
             else if (strcmp(op.opcao1, "terminar") == 0)
             {
                 printf("\nUtilizador [%s] de pid [%d] saiu.\n", cliente.utilizador.nome, cliente.utilizador.user_pid);
+                printf("Quantidade de users conectados: [%d]\n\n", listaUtilizadores->nr_users);
+
+                pthread_mutex_lock(&listaViagens_mutex);
+
+                int viagens_removidas = 0;
+
+                // 2. PERCORRER TODAS AS VIAGENS
+                for (int i = 0; i < NVIAGENS; i++) 
+                {
+                    // Se a viagem existe (tem origem) E o nome pertence ao cliente que vai sair
+                    if (listaViagens.viagem[i].origem[0] != '\0' && strcmp(listaViagens.viagem[i].utilizador.nome, cliente.utilizador.nome) == 0) 
+                    {
+                        memset(&listaViagens.viagem[i], 0, sizeof(Viagem));
+                        viagens_removidas++;
+                    }
+                }
+
+                // 3. ATUALIZAR CONTADOR
+                while (listaViagens.num_viagens > 0 && listaViagens.viagem[listaViagens.num_viagens - 1].origem[0] == '\0') 
+                {
+                    listaViagens.num_viagens--;
+                }
+
+                pthread_mutex_unlock(&listaViagens_mutex);
+
+                printf("[INFO] Foram canceladas %d viagens do utilizador %s.\n", viagens_removidas, cliente.utilizador.nome);
+
                 removeUser(cliente.utilizador.nome);
-                printf("Quantidade de users conectados: [%d]\n", listaUtilizadores->nr_users);
 
                 fd_controlador = open(cliente.fifo, O_WRONLY);
                 if (fd_controlador != -1)
                 {
                     tipo.tipo = 4;
-                    strcpy(controlador.msg, "Adeus");
+                    memset(&controlador, 0, sizeof(dadosControlador));
+                    strcpy(controlador.msg, "Sessao terminada. As suas viagens foram canceladas.");
                     write(fd_controlador, &tipo, sizeof(Tipo));
                     write(fd_controlador, &controlador, sizeof(dadosControlador));
                     close(fd_controlador);
