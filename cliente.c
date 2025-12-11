@@ -91,12 +91,11 @@ void *AtendeControlador(void *tha) {
                             int m = (listaViagens.viagem[i].hora % 3600) / 60;
                             int s = listaViagens.viagem[i].hora % 60;
 
-                            printf("Nome: %s | ID %d | Hora: %02dh:%02dm:%02ds | Origem: %s | Destino: %s | Distancia: %d km \n",
+                            printf("Nome: %s | ID %d | Hora: %02dh:%02dm:%02ds | Origem: %s | Distancia: %d km \n",
                                 listaViagens.viagem[i].utilizador.nome,
                                 listaViagens.viagem[i].id,
                                 h, m, s,
                                 listaViagens.viagem[i].origem,
-                                listaViagens.viagem[i].destino[0] ? listaViagens.viagem[i].destino : "(indefinido)",
                                 listaViagens.viagem[i].distancia
                             );
 
@@ -125,7 +124,7 @@ void *AtendeControlador(void *tha) {
             // Tipo Login
             else if (tipo.tipo == 5) {
                 if (read(fd_controlador, &controlador, sizeof(dadosControlador)) > 0) {
-                    if (controlador.entrar == 1) {
+                    if (controlador.entrar) {
                         cliente.entrar = 1;
 
                         printf("-Bem-vindo(a), %s!\n", cliente.utilizador.nome);
@@ -154,6 +153,7 @@ void *AtendeControlador(void *tha) {
         }
         
     }
+    close(fd_controlador);
     unlink(ptd->fifo);
     pthread_exit(NULL);
 }
