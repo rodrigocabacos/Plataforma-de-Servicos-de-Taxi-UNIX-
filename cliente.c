@@ -133,10 +133,12 @@ void *AtendeControlador(void *tha) {
             // Tipo Sair
             else if (tipo.tipo == 4) {
                 if (read(fd_controlador, &controlador, sizeof(dadosControlador)) > 0) {
-                    printf("[AVISO] %s\n", controlador.msg);
+                    printf("%s\n", controlador.msg);
                     running = 0;
                     td[0].continuar = 0;
                     close(fd_controlador);
+                    unlink(ptd->fifo);
+                    exit(0);
                 }
             }
             // Tipo Login

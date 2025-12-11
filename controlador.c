@@ -333,7 +333,7 @@ void *AtendeControlador(void *tha)
                     if (fd_controlador != -1)
                     {
                         tipo.tipo = 4;
-                        strcpy(controlador.msg, "Controlador Encerrou.\nPressione enter para continuar.");
+                        strcpy(controlador.msg, "[SHUTDOWN] Controlador Encerrou.\n");
 
                         // Escreve os dados no FIFO
                         if (write(fd_controlador, &tipo, sizeof(Tipo)) == -1)
@@ -620,7 +620,7 @@ void *AtendeCliente(void *tha)
                 // preparar resposta ao cliente
                 tipo.tipo = 2;
                 memset(&controlador, 0, sizeof(controlador));
-                snprintf(controlador.msg, sizeof(controlador.msg), "Viagem %d cancelada com sucesso.", id);
+                snprintf(controlador.msg, sizeof(controlador.msg), "[AVISO] Viagem [%d] cancelada com sucesso.", id);
 
                 // enviar resposta direta ao cliente
                 fd_controlador = open(cliente.fifo, O_WRONLY);
@@ -690,7 +690,7 @@ void *AtendeCliente(void *tha)
                 {
                     tipo.tipo = 4;
                     memset(&controlador, 0, sizeof(dadosControlador));
-                    strcpy(controlador.msg, "Sessao terminada. As suas viagens foram canceladas.");
+                    strcpy(controlador.msg, "[AVISO] Sessao terminada. Todas as suas viagens foram canceladas.");
                     write(fd_controlador, &tipo, sizeof(Tipo));
                     write(fd_controlador, &controlador, sizeof(dadosControlador));
                     close(fd_controlador);
